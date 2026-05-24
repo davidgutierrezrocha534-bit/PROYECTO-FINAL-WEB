@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Teacher - Sistema de Tutorías y Aprendizaje</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f4ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet.js (Librería de Mapas Open-Source) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Ajuste de z-index para evitar que los controles del mapa se superpongan a los modales */
+        .leaflet-container { z-index: 1 !important; }
+    </style>
+</head>
+<body class="h-full text-slate-800">
+
+    <!-- ========================================== -->
+    <!-- CONTENEDOR DE AUTENTICACIÓN (LOGIN)        -->
+    <!-- ========================================== -->
+    <div id="auth-container" class="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-slate-950">
+        <div class="sm:mx-auto sm:w-full sm:max-w-md text-center">
+            <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 tracking-tight">
+                My Teacher
+            </h1>
+            <p class="mt-2 text-sm text-slate-400">Plataforma Profesional de Tutorías Académicas</p>
+        </div>
+
+        <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+            <div class="bg-white py-8 px-4 shadow-2xl rounded-2xl sm:px-10 border border-slate-200">
+                <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium"></div>
+                
+                <form onsubmit="handleLogin(event)" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">Correo Electrónico</label>
+                        <input type="email" id="email" required placeholder="ejemplo@myteacher.com"
+                            class="mt-1 block w-full px-4 py-3 border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">Contraseña</label>
+                        <input type="password" id="password" required placeholder="••••••••"
+                            class="mt-1 block w-full px-4 py-3 border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm">
+                    </div>
+
+                    <button type="submit" 
+                        class="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-md text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500">
+                        Iniciar Sesión Seguro
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- ARQUITECTURA DEL DASHBOARD PRINCIPAL      -->
+    <!-- ========================================== -->
+    <div id="dashboard-container" class="hidden min-h-screen flex flex-col md:flex-row">
+        
+        <!-- Sidebar Izquierda -->
+        <aside class="w-full md:w-64 bg-slate-900 text-white flex flex-col border-r border-slate-800">
+            <div class="h-20 flex items-center px-6 border-b border-slate-800 justify-between">
+                <span class="text-xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">My Teacher Hub</span>
+                <span id="role-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider"></span>
+            </div>
+            
+            <nav class="flex-1 p-4 space-y-1">
+                <button onclick="switchView('main')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl bg-slate-800 text-white font-medium text-left transition-all">
+                    <span>📊</span> <span>Panel de Control</span>
+                </button>
+                <button onclick="switchView('profile')" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white font-medium text-left transition-all">
+                    <span>⚙️</span> <span>Editar Mi Perfil</span>
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-800">
+                <div class="flex items-center space-x-3 mb-4">
+                    <div class="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold text-lg shadow-md" id="avatar-placeholder"></div>
+                    <div class="truncate">
+                        <p class="text-sm font-semibold truncate" id="user-display-name"></p>
+                        <p class="text-xs text-slate-400 truncate" id="user-display-email"></p>
+                    </div>
+                </div>
+                <button onclick="handleLogout()" class="w-full py-2 px-4 rounded-xl border border-slate-700 hover:bg-slate-800 text-sm font-medium transition-colors text-slate-300 hover:text-white">
+                    Cerrar Sesión 🚪
+                </button>
+            </div>
+        </aside>
+
+        <!-- Contenedor del Espacio de Trabajo -->
+        <main class="flex-1 flex flex-col bg-slate-50 overflow-hidden">
+            
+            <!-- Navbar Superior -->
+            <header class="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 md:px-8 shadow-sm">
+                <h2 class="text-xl font-bold text-slate-900" id="welcome-title">Bienvenido</h2>
+                <div id="action-header-btn"></div>
+            </header>
+
+            <!-- Zona de Paneles Dinámicos -->
+            <div id="main-view" class="flex-1 overflow-y-auto p-6 md:p-8">
+                
+                <!-- KPI Widgets Globales -->
+                <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
+                    <div class="bg-white overflow-hidden shadow-sm border border-slate-200 rounded-2xl p-6">
+                        <dt class="text-sm font-medium text-slate-500 truncate">Tutorías Solicitadas</dt>
+                        <dd class="mt-1 text-3xl font-bold text-slate-900" id="kpi-total">0</dd>
+                    </div>
+                    <div class="bg-white overflow-hidden shadow-sm border border-slate-200 rounded-2xl p-6">
+                        <dt class="text-sm font-medium text-slate-500 truncate">Sesiones Confirmadas</dt>
+                        <dd class="mt-1 text-3xl font-bold text-emerald-600" id="kpi-confirmed">0</dd>
+                    </div>
+                    <div class="bg-white overflow-hidden shadow-sm border border-slate-200 rounded-2xl p-6">
+                        <dt class="text-sm font-medium text-slate-500 truncate" id="kpi-dynamic-label">Sesiones Pendientes</dt>
+                        <dd class="mt-1 text-3xl font-bold text-amber-500" id="kpi-dynamic-value">0</dd>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN NUEVA: MAPA DE UBICACIÓN PRESENCIAL (ALUMNO) -->
+                <div id="student-map-section" class="hidden mb-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <div class="flex items-center space-x-2 mb-3">
+                        <span class="text-xl">📍</span>
+                        <div>
+                            <h4 class="text-base font-bold text-slate-900">Tu Próxima Tutoría Presencial Confirmada</h4>
+                            <p class="text-xs text-slate-500">Lugar de encuentro: Edificio de Innovación y Laboratorios (Piso 3, Aula 304)</p>
+                        </div>
+                    </div>
+                    <!-- Contenedor del minimapa interactivo -->
+                    <div id="map" class="w-full h-64 rounded-xl border border-slate-200 shadow-inner"></div>
+                </div>
+
+                <!-- SECCIÓN EXCLUSIVA DE MATERIAL DIDÁCTICO (ALUMNO) -->
+                <div id="academic-materials-section" class="hidden mb-8">
+                    <!-- Inyección dinámica de clases confirmadas -->
+                </div>
+
+                <!-- SECCIÓN DINÁMICA: CURSOS (ALUMNO) O ESTUDIANTES (PROFESOR) -->
+                <div id="role-specific-section" class="mb-8"></div>
+
+                <!-- Tabla de Historial y Estados de Tutorías -->
+                <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                    <div class="px-6 py-5 border-b border-slate-200">
+                        <h3 class="text-lg font-semibold text-slate-900">Historial y Flujo de Clases</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Detalles de la Clase</th>
+                                    <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha y Hora</th>
+                                    <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Modalidad / Enlace</th>
+                                    <th class="px-6 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado</th>
+                                    <th class="px-6 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Acción Requerida</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookings-table-body" class="bg-white divide-y divide-slate-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VISTA EDITAR PERFIL -->
+            <div id="profile-view" class="hidden flex-1 overflow-y-auto p-6 md:p-8">
+                <div class="max-w-2xl bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                    <h3 class="text-lg font-bold text-slate-900 mb-1">Configuración del Perfil Profesional</h3>
+                    <p class="text-sm text-slate-500 mb-6">Actualiza tus datos públicos en la plataforma My Teacher.</p>
+                    
+                    <form onsubmit="handleSaveProfile(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Nombre Completo</label>
+                            <input type="text" id="profile-name" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-brand-500 focus:border-brand-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700">Correo Electrónico de Contacto</label>
+                            <input type="email" id="profile-email" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-brand-500 focus:border-brand-500">
+                        </div>
+                        <div id="profile-extra-fields">
+                            <!-- Inyección dinámica según rol -->
+                        </div>
+                        <div class="pt-4 flex justify-end">
+                            <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl text-sm transition-colors shadow-sm">
+                                Guardar Cambios Locales
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- COMPONENTE: VENTANA DE CHAT INTEGRADA      -->
+    <!-- ========================================== -->
+    <div id="chat-widget" class="hidden fixed bottom-5 right-5 z-40 w-80 md:w-96 bg-white border border-slate-200 shadow-2xl rounded-2xl overflow-hidden flex flex-col transition-all">
+        <div class="bg-slate-900 p-4 flex justify-between items-center text-white cursor-pointer" onclick="toggleChatCollapse()">
+            <div class="flex items-center space-x-2">
+                <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span class="font-bold text-sm" id="chat-header-title">Canal Privado de Consultas</span>
+            </div>
+            <span id="chat-collapse-icon" class="text-sm font-bold">▼</span>
+        </div>
+        <div id="chat-body" class="flex-1 p-4 h-64 overflow-y-auto bg-slate-50 space-y-3 flex flex-col">
+            <!-- Mensajes inyectados -->
+        </div>
+        <form id="chat-form" onsubmit="handleSendMessage(event)" class="p-3 bg-white border-t border-slate-100 flex items-center space-x-2">
+            <input type="text" id="chat-input" required placeholder="Escribe un mensaje académico..." class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+            <button type="submit" class="px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold">Enviar</button>
+        </form>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: AGENDAR NUEVA TUTORÍA               -->
+    <!-- ========================================== -->
+    <div id="booking-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-slate-900">Reservar Clase en My Teacher</h3>
+                <button onclick="toggleModal('booking-modal', false)" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+            </div>
+            <form onsubmit="handleBookingSubmit(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Materia / Oferta de Profesor</label>
+                    <select id="modal-subject" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-brand-500 focus:border-brand-500">
+                        <option value="Cálculo Multivariable e Ingeniería">Cálculo Multivariable e Ingeniería ($25/hr)</option>
+                        <option value="Estructuras de Datos y Algoritmos">Estructuras de Datos y Algoritmos ($30/hr)</option>
+                        <option value="Arquitectura Cloud y DevOps">Arquitectura Cloud y DevOps ($35/hr)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Modalidad</label>
+                    <select id="modal-modality" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-brand-500 focus:border-brand-500">
+                        <option value="Virtual (Sala Jitsi integrada)">Virtual (Sala Jitsi integrada)</option>
+                        <option value="Presencial (Campus central)">Presencial (Campus central)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Fecha y Hora Programada</label>
+                    <input type="datetime-local" id="modal-date" required class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-brand-500 focus:border-brand-500">
+                </div>
+                <div class="pt-4 flex justify-end space-x-3">
+                    <button type="button" onclick="toggleModal('booking-modal', false)" class="px-4 py-2 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 border border-transparent rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700">Proceder al Pago</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: PASARELA DE PAGO API BANCARIA       -->
+    <!-- ========================================== -->
+    <div id="payment-modal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full border border-slate-100 overflow-hidden">
+            <div class="p-6 bg-gradient-to-br from-slate-900 to-indigo-950 text-white relative">
+                <span class="absolute top-4 right-4 bg-white/10 px-2 py-1 rounded text-[10px] tracking-widest uppercase font-mono">Secure API Endpoint</span>
+                <p class="text-xs text-indigo-300 font-mono">Pasarela de Autenticación Financiera</p>
+                <h3 class="text-xl font-bold mt-1">Procesar Transacción Bancaria</h3>
+                <div class="mt-4 p-3 bg-white/5 rounded-xl flex justify-between items-center border border-white/10">
+                    <span class="text-xs text-slate-300" id="payment-subject-label">Curso seleccionado</span>
+                    <span class="text-sm font-mono font-bold text-emerald-400">Transacción Segura</span>
+                </div>
+            </div>
+            
+            <form onsubmit="executeBankTransaction(event)" class="p-6 space-y-4">
+                <div id="payment-loading" class="hidden text-center py-6">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600 mx-auto mb-4"></div>
+                    <p class="text-sm font-semibold text-slate-700">Validando fondos con la entidad emisora...</p>
+                    <p class="text-xs text-slate-400 mt-1">Cifrado de extremo a extremo activo</p>
+                </div>
+
+                <div id="payment-form-fields" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Número de Tarjeta de Crédito / Débito</label>
+                        <input type="text" placeholder="4532 •••• •••• 8824" required max-length="16" class="mt-1 block w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Vencimiento</label>
+                            <input type="text" placeholder="MM/AA" required class="mt-1 block w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-center">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Código CVV</label>
+                            <input type="password" placeholder="•••" required max-length="3" class="mt-1 block w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-center">
+                        </div>
+                    </div>
+                    <div class="pt-4 flex flex-col space-y-2">
+                        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md">
+                            Autorizar Pago Bancario
+                        </button>
+                        <button type="button" onclick="toggleModal('payment-modal', false)" class="w-full py-2 text-xs text-slate-500 hover:text-slate-800 text-center">
+                            Cancelar y revocar orden
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- MOTOR DE LÓGICA CORE (JAVASCRIPT)         -->
+    <!-- ========================================== -->
+    <script>
+        const ACADEMIC_RESOURCES = {
+            "Cálculo Multivariable e Ingeniería": [
+                { title: "📁 Apuntes Oficiales: Integrales de Línea y Superficie", link: "#", type: "PDF" },
+                { title: "🎥 Clase Grabada: Visualización del Teorema de Stokes en 3D", link: "#", type: "VIDEO" }
+            ],
+            "Estructuras de Datos y Algoritmos": [
+                { title: "📁 Repositorio de Código: Árboles AVL y Grafos en C++", link: "#", type: "CODE" },
+                { title: "📝 Cheat Sheet: Análisis Asintótico y Complejidad Temporal", link: "#", type: "PDF" }
+            ],
+            "Arquitectura Cloud y DevOps": [
+                { title: "📁 Blueprint Productivo: Orquestación con Kubernetes", link: "#", type: "YAML" },
+                { title: "🎥 Laboratorio Práctico: Pipelines CI/CD con GitHub Actions", link: "#", type: "VIDEO" }
+            ]
+        };
+
+        const TEACHER_COURSES = [
+            { id: "C-1", subject: "Cálculo Multivariable e Ingeniería", teacher: "Dr. Carlos Martínez", rating: "4.9 ⭐⭐⭐⭐⭐", price: "$25/hr", desc: "Derivadas parciales, integrales múltiples y teoremas vectoriales fundamentales." },
+            { id: "C-2", subject: "Estructuras de Datos y Algoritmos", teacher: "Dr. Carlos Martínez", rating: "4.8 ⭐⭐⭐⭐⭐", price: "$30/hr", desc: "Grafos, árboles binarios, optimización asintótica Big-O y algoritmos de ordenamiento avanzados." },
+            { id: "C-3", subject: "Arquitectura Cloud y DevOps", teacher: "Dr. Carlos Martínez", rating: "5.0 ⭐⭐⭐⭐⭐", price: "$35/hr", desc: "Diseño de infraestructuras de alta disponibilidad, Docker, Kubernetes y CI/CD en AWS." }
+        ];
+
+        let currentUser = null;
+        let bookings = [];
+        let chatMessages = [];
+        let temporaryBookingData = null;
+        let leafletMapInstance = null; // Instancia global para evitar duplicidad de mapa
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('myteacher_bookings')) {
+                const initialBookings = [
+                    { id: "BKG-101", student: "Alumno Demo", studentEmail: "alumno@educonnect.com", tutor: "Dr. Carlos Martínez", subject: "Cálculo Multivariable e Ingeniería", date: "2026-06-01T14:00", modality: "Virtual (Sala Jitsi integrada)", status: "CONFIRMED", link: "https://meet.jit.si/myteacher-calculo-advanced" },
+                    { id: "BKG-102", student: "Alumno Demo", studentEmail: "alumno@educonnect.com", tutor: "Dr. Carlos Martínez", subject: "Estructuras de Datos y Algoritmos", date: "2026-06-03T09:30", modality: "Presencial (Campus central)", status: "PENDING", link: "#" }
+                ];
+                localStorage.setItem('myteacher_bookings', JSON.stringify(initialBookings));
+            }
+            if (!localStorage.getItem('myteacher_chat')) {
+                localStorage.setItem('myteacher_chat', JSON.stringify([
+                    { sender: 'profesor', name: 'Dr. Carlos Martínez', text: 'Hola Alumno, bienvenido al canal de mensajería. Deja tus dudas aquí.', timestamp: '10:00' }
+                ]));
+            }
+            bookings = JSON.parse(localStorage.getItem('myteacher_bookings'));
+            chatMessages = JSON.parse(localStorage.getItem('myteacher_chat'));
+            checkSession();
+        });
+
+        function checkSession() {
+            const savedUser = sessionStorage.getItem('myteacher_session');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                renderDashboard();
+            } else {
+                showAuth();
+            }
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('login-error');
+
+            errorDiv.classList.add('hidden');
+
+            if (email === 'alumno@educonnect.com' && password === 'estudiante123') {
+                currentUser = JSON.parse(localStorage.getItem('profile_alumno')) || { name: 'Alumno Demo', email: email, role: 'estudiante', bio: 'Estudiante de Ingeniería de Software.' };
+            } else if (email === 'profesor@educonnect.com' && password === 'profesor123') {
+                currentUser = JSON.parse(localStorage.getItem('profile_profesor')) || { name: 'Dr. Carlos Martínez', email: email, role: 'profesor', bio: 'Catedrático e Investigador Senior.' };
+            } else {
+                errorDiv.innerText = 'Error de autenticación. Verifique credenciales.';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            sessionStorage.setItem('myteacher_session', JSON.stringify(currentUser));
+            renderDashboard();
+        }
+
+        function handleLogout() {
+            sessionStorage.removeItem('myteacher_session');
+            currentUser = null;
+            showAuth();
+        }
+
+        function showAuth() {
+            document.getElementById('auth-container').classList.remove('hidden');
+            document.getElementById('dashboard-container').classList.add('hidden');
+            document.getElementById('chat-widget').classList.add('hidden');
+        }
+
+        function switchView(view) {
+            if (view === 'main') {
+                document.getElementById('main-view').classList.remove('hidden');
+                document.getElementById('profile-view').classList.add('hidden');
+                // Forzar refresco de mapas por si se redimensiona la vista
+                if(leafletMapInstance) { leafletMapInstance.invalidateSize(); }
+            } else {
+                document.getElementById('main-view').classList.add('hidden');
+                document.getElementById('profile-view').classList.remove('hidden');
+                initProfileForm();
+            }
+        }
+
+        function initProfileForm() {
+            document.getElementById('profile-name').value = currentUser.name;
+            document.getElementById('profile-email').value = currentUser.email;
+            
+            const extra = document.getElementById('profile-extra-fields');
+            extra.innerHTML = `
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Biografía / Presentación Corta</label>
+                    <textarea id="profile-bio" rows="3" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-brand-500 focus:border-brand-500">${currentUser.bio || ''}</textarea>
+                </div>
+            `;
+        }
+
+        function handleSaveProfile(e) {
+            e.preventDefault();
+            currentUser.name = document.getElementById('profile-name').value;
+            currentUser.email = document.getElementById('profile-email').value;
+            currentUser.bio = document.getElementById('profile-bio').value;
+
+            sessionStorage.setItem('myteacher_session', JSON.stringify(currentUser));
+            localStorage.setItem(`profile_${currentUser.role}`, JSON.stringify(currentUser));
+            
+            renderDashboard();
+            switchView('main');
+            alert('Perfil actualizado correctamente de forma local.');
+        }
+
+        function renderDashboard() {
+            document.getElementById('auth-container').classList.add('hidden');
+            document.getElementById('dashboard-container').classList.remove('hidden');
+            document.getElementById('chat-widget').classList.remove('hidden');
+
+            document.getElementById('user-display-name').innerText = currentUser.name;
+            document.getElementById('user-display-email').innerText = currentUser.email;
+            document.getElementById('avatar-placeholder').innerText = currentUser.name.charAt(0);
+            
+            const badge = document.getElementById('role-badge');
+            const targetSection = document.getElementById('role-specific-section');
+            const materialsSection = document.getElementById('academic-materials-section');
+            const mapSection = document.getElementById('student-map-section');
+            
+            if (currentUser.role === 'profesor') {
+                badge.innerText = "Profesor";
+                badge.className = "px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-emerald-600 text-white";
+                document.getElementById('welcome-title').innerText = "Panel del Docente - My Teacher";
+                document.getElementById('action-header-btn').innerHTML = ""; 
+                document.getElementById('kpi-dynamic-label').innerText = "Puntuación Promedio Profesor";
+                document.getElementById('kpi-dynamic-value').innerText = "4.9 / 5.0";
+                materialsSection.classList.add('hidden');
+                mapSection.classList.add('hidden');
+
+                targetSection.innerHTML = `
+                    <h3 class="text-lg font-bold text-slate-900 mb-4">🧑‍🎓 Tus Estudiantes Registrados y su Reputación</h3>
+                    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <h4 class="text-base font-bold text-slate-900">Alumno Demo</h4>
+                                <span class="px-2 py-0.5 bg-slate-100 border border-slate-200 text-xs rounded-md font-semibold text-slate-600">alumno@educonnect.com</span>
+                            </div>
+                            <p class="text-sm text-slate-600 mt-1"><span class="font-medium text-slate-800">Historial y Rendimiento:</span> Excelente participación en clases virtuales, puntual y proactivo.</p>
+                        </div>
+                        <div class="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-center min-w-[160px]">
+                            <span class="block text-xs font-semibold text-indigo-700 uppercase tracking-wider">Reputación Alumno</span>
+                            <span class="text-base font-bold text-slate-900 block mt-1">4.7 / 5.0 🌟</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                badge.innerText = "Estudiante";
+                badge.className = "px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-brand-600 text-white";
+                document.getElementById('welcome-title').innerText = "Panel del Alumno - My Teacher";
+                
+                document.getElementById('action-header-btn').innerHTML = `
+                    <button onclick="toggleModal('booking-modal', true)" class="inline-flex items-center px-4 py-2.5 border border-transparent text-sm font-semibold rounded-xl shadow-sm text-white bg-brand-600 hover:bg-brand-700 transition-all">
+                        ➕ Agendar Nueva Tutoría
+                    </button>
+                `;
+
+                document.getElementById('kpi-dynamic-label').innerText = "Tu Puntuación como Estudiante";
+                document.getElementById('kpi-dynamic-value').innerText = "4.7 / 5.0 🌟";
+
+                // Lógica de Renderizado y Activación de Mapa Presencial
+                const hasConfirmedPresencial = bookings.some(b => b.status === 'CONFIRMED' && b.modality === 'Presencial (Campus central)');
+                if (hasConfirmedPresencial) {
+                    mapSection.classList.remove('hidden');
+                    // Retrasar renderizado microsegundos para asegurar que el contenedor de Leaflet mida bien sus dimensiones
+                    setTimeout(() => { initLeafletMap(); }, 100);
+                } else {
+                    mapSection.classList.add('hidden');
+                }
+
+                // Renderizar Materiales Académicos
+                const confirmedBookings = bookings.filter(b => b.status === 'CONFIRMED');
+                if (confirmedBookings.length > 0) {
+                    materialsSection.classList.remove('hidden');
+                    let materialsHTML = `
+                        <h3 class="text-lg font-bold text-slate-900 mb-4">🚀 Materiales de Estudio Desbloqueados por tus Profesores</h3>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    `;
+                    confirmedBookings.forEach(cb => {
+                        const resources = ACADEMIC_RESOURCES[cb.subject] || [];
+                        resources.forEach(res => {
+                            materialsHTML += `
+                                <div class="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs text-emerald-800 font-bold uppercase tracking-wider">[Materia: ${cb.subject}]</p>
+                                        <h5 class="text-sm font-semibold text-slate-900 mt-1">${res.title}</h5>
+                                    </div>
+                                    <span class="px-2.5 py-1 bg-white border border-emerald-300 text-xs text-emerald-700 font-mono rounded-lg">${res.type}</span>
+                                </div>
+                            `;
+                        });
+                    });
+                    materialsHTML += `</div>`;
+                    materialsSection.innerHTML = materialsHTML;
+                } else {
+                    materialsSection.classList.add('hidden');
+                }
+
+                // Cursos Ofertados
+                let courseCards = `<h3 class="text-lg font-bold text-slate-900 mb-4">📚 Oferta de Cursos Disponibles</h3><div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">`;
+                TEACHER_COURSES.forEach(course => {
+                    courseCards += `
+                        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-xs font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-1 rounded-md">${course.price}</span>
+                                    <span class="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-md">${course.rating}</span>
+                                </div>
+                                <h4 class="text-base font-bold text-slate-900 leading-snug">${course.subject}</h4>
+                                <p class="text-xs text-slate-500 mt-1">Profesor: ${course.teacher}</p>
+                                <p class="text-sm text-slate-600 mt-3 line-clamp-3">${course.desc}</p>
+                            </div>
+                            <div class="mt-5 pt-4 border-t border-slate-100">
+                                <button onclick="openBookingWithSubject('${course.subject}')" class="w-full text-center py-2 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-colors">
+                                    Reservar este Curso
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                courseCards += `</div>`;
+                targetSection.innerHTML = courseCards;
+            }
+
+            calculateKPIs();
+            renderTableData();
+            renderChat();
+        }
+
+        // --- INSTANCIACIÓN DEL MAPA ABIERTO CON LEAFLET ---
+        function initLeafletMap() {
+            // Ubicación ficticia del campus (Coordenadas de ejemplo estables)
+            const campusCoords = [4.6097, -74.0817]; 
+
+            if (!leafletMapInstance) {
+                // Crear el mapa por primera vez
+                leafletMapInstance = L.map('map').setView(campusCoords, 16);
+
+                // Capa visual del mapa usando OpenStreetMap
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(leafletMapInstance);
+
+                // Agregar el marcador de ubicación del salón de tutorías
+                L.marker(campusCoords).addTo(leafletMapInstance)
+                    .bindPopup('<b>Punto de Encuentro Académico</b><br>Edificio de Innovación, Aula 304.')
+                    .openPopup();
+            } else {
+                // Si ya existe, se recalculan dimensiones para evitar parpadeos visuales
+                leafletMapInstance.invalidateSize();
+            }
+        }
+
+        function calculateKPIs() {
+            document.getElementById('kpi-total').innerText = bookings.length;
+            document.getElementById('kpi-confirmed').innerText = bookings.filter(b => b.status === 'CONFIRMED').length;
+        }
+
+        function openBookingWithSubject(subjectName) {
+            document.getElementById('modal-subject').value = subjectName;
+            toggleModal('booking-modal', true);
+        }
+
+        function renderTableData() {
+            const tbody = document.getElementById('bookings-table-body');
+            tbody.innerHTML = '';
+
+            bookings.forEach((booking) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50/80 transition-colors";
+
+                let statusBadge = '';
+                if(booking.status === 'PENDING') statusBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">Pendiente</span>`;
+                if(booking.status === 'CONFIRMED') statusBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Confirmada</span>`;
+                if(booking.status === 'CANCELLED') statusBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">Cancelada</span>`;
+
+                let actionButton = '';
+                if (currentUser.role === 'profesor' && booking.status === 'PENDING') {
+                    actionButton = `
+                        <button onclick="updateStatus('${booking.id}', 'CONFIRMED')" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors mr-2">Aceptar</button>
+                        <button onclick="updateStatus('${booking.id}', 'CANCELLED')" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors">Rechazar</button>
+                    `;
+                } else if (booking.status !== 'CANCELLED') {
+                    actionButton = `<button onclick="updateStatus('${booking.id}', 'CANCELLED')" class="px-3 py-1.5 text-xs font-medium rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all">Cancelar</button>`;
+                } else {
+                    actionButton = `<span class="text-xs text-slate-400">-</span>`;
+                }
+
+                let linkLayout = `<span class="text-slate-500 text-xs">${booking.modality}</span>`;
+                if (booking.status === 'CONFIRMED') {
+                    if (booking.modality.includes('Virtual')) {
+                        linkLayout = `
+                            <div class="flex flex-col space-y-1">
+                                <span class="text-xs text-slate-500">${booking.modality}</span>
+                                <a href="${booking.link}" target="_blank" class="inline-flex items-center text-xs font-semibold text-brand-600 hover:text-brand-700 underline">
+                                    🚀 Aula Jitsi Integrada
+                                </a>
+                            </div>
+                        `;
+                    } else {
+                        linkLayout = `
+                            <div class="flex flex-col space-y-1">
+                                <span class="text-xs text-slate-700 font-medium">📍 ${booking.modality}</span>
+                                <span class="text-[11px] text-emerald-600 font-semibold">Ubicación activada en el mapa superior</span>
+                            </div>
+                        `;
+                    }
+                }
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-semibold text-slate-900">${booking.subject}</div>
+                        <div class="text-xs text-slate-500">Participantes: 🧑‍🎓 ${booking.student} | 👨‍🏫 ${booking.tutor}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">${booking.date.replace('T', ' ')} hs.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">${linkLayout}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${statusBadge}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">${actionButton}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateStatus(id, newStatus) {
+            bookings = bookings.map(b => {
+                if (b.id === id) {
+                    b.status = newStatus;
+                    if (newStatus === 'CONFIRMED' && b.modality.includes('Virtual')) {
+                        b.link = `https://meet.jit.si/myteacher-${id}-${Date.now()}`;
+                    }
+                }
+                return b;
+            });
+            localStorage.setItem('myteacher_bookings', JSON.stringify(bookings));
+            renderDashboard();
+        }
+
+        function handleBookingSubmit(e) {
+            e.preventDefault();
+            const subject = document.getElementById('modal-subject').value;
+            const modality = document.getElementById('modal-modality').value;
+            const date = document.getElementById('modal-date').value;
+
+            temporaryBookingData = { subject, modality, date };
+
+            document.getElementById('payment-subject-label').innerText = `Materia: ${subject}`;
+            toggleModal('booking-modal', false);
+            toggleModal('payment-modal', true);
+        }
+
+        function executeBankTransaction(e) {
+            e.preventDefault();
+            document.getElementById('payment-form-fields').classList.add('hidden');
+            document.getElementById('payment-loading').classList.remove('hidden');
+
+            setTimeout(() => {
+                const newId = `BKG-${Math.floor(100 + Math.random() * 900)}`;
+                const newBkg = {
+                    id: newId,
+                    student: "Alumno Demo",
+                    studentEmail: "alumno@educonnect.com",
+                    tutor: "Dr. Carlos Martínez",
+                    subject: temporaryBookingData.subject,
+                    date: temporaryBookingData.date,
+                    modality: temporaryBookingData.modality,
+                    status: "PENDING",
+                    link: "#"
+                };
+
+                bookings.unshift(newBkg);
+                localStorage.setItem('myteacher_bookings', JSON.stringify(bookings));
+                
+                document.getElementById('payment-form-fields').classList.remove('hidden');
+                document.getElementById('payment-loading').classList.add('hidden');
+                toggleModal('payment-modal', false);
+                
+                renderDashboard();
+                alert(`¡Transacción Bancaria Autorizada! La tutoría ${newId} ha quedado en estado Pendiente. El mapa se desbloqueará una vez que el profesor la confirme.`);
+            }, 2000);
+        }
+
+        // --- SISTEMA DE CHAT PERSISTENTE ---
+        function renderChat() {
+            const container = document.getElementById('chat-body');
+            container.innerHTML = '';
+            
+            document.getElementById('chat-header-title').innerText = currentUser.role === 'profesor' 
+                ? `Canal con Alumno Demo` 
+                : `Canal con Dr. Carlos Martínez`;
+
+            chatMessages.forEach(msg => {
+                const isMe = msg.sender === currentUser.role;
+                const bubble = document.createElement('div');
+                bubble.className = `p-2.5 rounded-xl text-xs max-w-[80%] ${isMe ? 'bg-brand-600 text-white align-self-end ml-auto' : 'bg-slate-200 text-slate-800'}`;
+                bubble.innerHTML = `
+                    <p class="font-bold opacity-75">${msg.name}</p>
+                    <p class="mt-0.5">${msg.text}</p>
+                `;
+                container.appendChild(bubble);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function handleSendMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(!text) return;
+
+            const newMsg = {
+                sender: currentUser.role,
+                name: currentUser.name,
+                text: text,
+                timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            };
+
+            chatMessages.push(newMsg);
+            localStorage.setItem('myteacher_chat', JSON.stringify(chatMessages));
+            input.value = '';
+            renderChat();
+        }
+
+        function toggleChatCollapse() {
+            const body = document.getElementById('chat-body');
+            const form = document.getElementById('chat-form');
+            const icon = document.getElementById('chat-collapse-icon');
+            if(body.classList.contains('hidden')) {
+                body.classList.remove('hidden');
+                form.classList.remove('hidden');
+                icon.innerText = '▼';
+            } else {
+                body.classList.add('hidden');
+                form.classList.add('hidden');
+                icon.innerText = '▲';
+            }
+        }
+
+        function toggleModal(modalId, show) {
+            const modal = document.getElementById(modalId);
+            if(show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
